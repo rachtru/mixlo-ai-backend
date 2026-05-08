@@ -47,8 +47,8 @@ async def analyze_stems(files: list[UploadFile] = File(...)):
     """
     if not files:
         raise HTTPException(400, "No files uploaded.")
-    if len(files) > 16:
-        raise HTTPException(400, "Maximum 16 stems per mix.")
+    if len(files) > 100:
+        raise HTTPException(400, "Maximum 100 stems per mix.")
 
     results = []
     session_id = str(uuid.uuid4())
