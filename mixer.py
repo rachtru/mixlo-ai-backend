@@ -1,5 +1,5 @@
 """
-Mixlo AI — Stem classification + mixing engine
+Mixlo AI ‚Äî Stem classification + mixing engine
 LibROSA handles analysis; Pedalboard handles processing.
 """
 
@@ -11,7 +11,7 @@ from pedalboard import (
 )
 
 
-# ── Stem classification ────────────────────────────────────────────────────────
+# ‚îÄ‚îÄ Stem classification ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
 
 LABEL_KEYWORDS = {
     "kick":    ["kick", "bd", "bassdrum", "bass_drum"],
@@ -50,27 +50,27 @@ def _spectral_label(audio: np.ndarray, sr: int) -> tuple[str, float]:
     tempo, _  = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr)
     tempo     = float(tempo) if np.isscalar(tempo) else float(tempo[0])
 
-    # Very low centroid + strong low-end → bass or kick
+    # Very low centroid + strong low-end ‚Üí bass or kick
     if centroid < 300 and rms > 0.05:
         return ("kick", 0.7) if zcr > 0.05 else ("bass", 0.7)
 
-    # Low centroid, sustained → bass
+    # Low centroid, sustained ‚Üí bass
     if centroid < 500:
         return "bass", 0.65
 
-    # High centroid + high ZCR → hihat / percussion
+    # High centroid + high ZCR ‚Üí hihat / percussion
     if centroid > 4000 and zcr > 0.15:
         return "hihat", 0.7
 
-    # Mid centroid + percussive → snare / drum
+    # Mid centroid + percussive ‚Üí snare / drum
     if 500 < centroid < 3000 and zcr > 0.08:
         return "snare" if centroid > 1500 else "drum", 0.6
 
-    # Low ZCR + mid centroid + sustained → pad
+    # Low ZCR + mid centroid + sustained ‚Üí pad
     if zcr < 0.04 and centroid < 2500:
         return "pad", 0.6
 
-    # High centroid + low ZCR → lead / melodic
+    # High centroid + low ZCR ‚Üí lead / melodic
     if centroid > 1500 and zcr < 0.06:
         return "lead", 0.55
 
@@ -84,7 +84,21 @@ def classify_stem(audio: np.ndarray, sr: int, filename: str) -> tuple[str, float
     return _spectral_label(audio, sr)
 
 
-# ── Per-stem signal chains ─────────────────────────────────────────────────────
+def rms_normalize(audio: np.ndarray, target_db: float = -20.0) -> tuple[np.ndarray, float]:
+    """
+    Normalize audio to a target RMS level so stems mixed together start
+    from a consistent loudness baseline regardless of export level.
+    Returns (normalized_audio, gain_db_applied).
+    """
+    rms = float(np.sqrt(np.mean(audio ** 2)))
+    if rms < 1e-8:
+        return audio, 0.0
+    target_rms = 10 ** (target_db / 20)
+    gain = target_rms / rms
+    return (audio * gain).astype(np.float32), round(20 * np.log10(gain), 2)
+
+
+# ‚îÄ‚îÄ Per-stem signal chains ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
 
 def _chain_kick() -> Pedalboard:
     return Pedalboard([
@@ -202,7 +216,7 @@ def _db_to_lin(db: float) -> float:
     return 10 ** (db / 20)
 
 
-# ── Mix engine ─────────────────────────────────────────────────────────────────
+# ‚îÄ‚îÄ Mix engine ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
 
 def mix_stems(stems: list[dict]) -> tuple[np.ndarray, int]:
     """
@@ -211,10 +225,10 @@ def mix_stems(stems: list[dict]) -> tuple[np.ndarray, int]:
     """
     sr = stems[0]["sr"]
 
-    # Align lengths — pad shorter stems with silence
+    # Align lengths ‚Äî pad shorter stems with silence
     max_len = max(s["audio"].shape[-1] for s in stems)
 
-    processed = []
+    bus = np.zeros((2, max_len), dtype=np.float32)
     for stem in stems:
         audio  = stem["audio"]   # shape: [2, N]
         label  = stem["label"]
@@ -227,15 +241,13 @@ def mix_stems(stems: list[dict]) -> tuple[np.ndarray, int]:
 
         stereo = np.stack([ch_l, ch_r]) * fader
 
-        # Pad to max length
+        # Pad to max length and accumulate directly into bus
         pad = max_len - stereo.shape[1]
         if pad > 0:
             stereo = np.pad(stereo, ((0, 0), (0, pad)))
 
-        processed.append(stereo)
-
-    # Sum all stems
-    bus = np.sum(processed, axis=0)
+        bus += stereo
+        del stereo, ch_l, ch_r
 
     # Soft-limit bus to prevent clipping (simple peak normalize to -1 dBFS)
     peak = np.max(np.abs(bus))
