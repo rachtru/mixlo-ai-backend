@@ -4,8 +4,7 @@ Accepts stem uploads, classifies them with LibROSA,
 mixes with Pedalboard, exports a final WAV.
 """
 
-import io
-import os
+import gc
 import uuid
 import tempfile
 from pathlib import Path
@@ -66,14 +65,18 @@ async def analyze_stems(files: list[UploadFile] = File(...)):
         dest = session_dir / upload.filename
         dest.write_bytes(raw)
 
-        audio, sr = librosa.load(str(dest), sr=None, mono=True)
+        # Load at 22050 Hz, first 30 s only — keeps RAM well under 512 MB
+        audio, sr = librosa.load(str(dest), sr=22050, mono=True, duration=30.0)
+        duration_sec = round(librosa.get_duration(filename=str(dest)), 2)
         label, confidence = classify_stem(audio, sr, upload.filename)
+        del audio
+        gc.collect()
 
         results.append({
             "filename": upload.filename,
             "label":    label,
             "confidence": round(confidence, 2),
-            "duration_sec": round(len(audio) / sr, 2),
+            "duration_sec": duration_sec,
             "sample_rate":  sr,
         })
 
@@ -98,11 +101,14 @@ async def mix_session(session_id: str):
     for path in stem_files:
         audio, sr = librosa.load(str(path), sr=44100, mono=False)
         if audio.ndim == 1:
-            audio = np.stack([audio, audio])  # mono → stereo
-        label, confidence = classify_stem(audio[0], sr, path.name)
+            audio = np.stack([audio, audio])
+        label, _ = classify_stem(audio[0], sr, path.name)
         stems.append({"audio": audio, "sr": sr, "label": label, "filename": path.name})
+        gc.collect()
 
     mixed, sr = mix_stems(stems)
+    del stems
+    gc.collect()
 
     out_filename = f"mixlo_mix_{session_id[:8]}.wav"
     out_path = OUTPUT_DIR / out_filename
