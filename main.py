@@ -16,7 +16,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from mixer import classify_stem, CHAINS, FADER_DB
+from mixer import classify_stem, CHAINS, FADER_DB, rms_normalize
 
 app = FastAPI(title="Mixlo AI", version="1.0.0")
 
@@ -67,7 +67,7 @@ async def analyze_stems(files: list[UploadFile] = File(...)):
 
         # Load at 22050 Hz, first 30 s only ‚Äî keeps RAM well under 512 MB
         audio, sr = librosa.load(str(dest), sr=22050, mono=True, duration=30.0)
-        duration_sec = round(librosa.get_duration(filename=str(dest)), 2)
+        duration_sec = round(librosa.get_duration(path=str(dest)), 2)
         label, confidence = classify_stem(audio, sr, upload.filename)
         del audio
         gc.collect()
@@ -101,7 +101,7 @@ async def mix_session(session_id: str):
 
     # Scan durations without loading audio to size the bus
     max_len = max(
-        int(librosa.get_duration(filename=str(p)) * SR) + SR
+        int(librosa.get_duration(path=str(p)) * SR) + SR
         for p in stem_files
     )
 
@@ -113,6 +113,10 @@ async def mix_session(session_id: str):
         if audio.ndim == 1:
             audio = np.stack([audio, audio])
         label, _ = classify_stem(audio[0], sr, path.name)
+
+        # Normalize each stem to a common RMS target so the mix balance
+        # isn't dependent on how the producer exported their files
+        audio, _ = rms_normalize(audio)
 
         chain = CHAINS.get(label, CHAINS["lead"])()
         fader = 10 ** (FADER_DB.get(label, -3) / 20)
