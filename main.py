@@ -109,7 +109,7 @@ async def mix_session(session_id: str):
 
     # Process one stem at a time ‚Äî never hold more than one + bus in RAM
     for path in stem_files:
-        audio, sr = librosa.load(str(path), sr=SR, mono=False)
+        audio, sr = librosa.load(str(path), sr=SR, mono=False, duration=120.0)
         if audio.ndim == 1:
             audio = np.stack([audio, audio])
         label, _ = classify_stem(audio[0], sr, path.name)
