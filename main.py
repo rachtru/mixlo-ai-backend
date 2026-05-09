@@ -1,5 +1,5 @@
 """
-Mixlo AI — FastAPI Backend
+Mixlo AI ‚Äî FastAPI Backend
 Accepts stem uploads, classifies them with LibROSA,
 mixes with Pedalboard, exports a final WAV.
 """
@@ -21,10 +21,10 @@ from mixer import classify_stem, CHAINS, FADER_DB
 app = FastAPI(title="Mixlo AI", version="1.0.0")
 
 app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 UPLOAD_DIR = Path(tempfile.gettempdir()) / "mixlo_uploads"
@@ -35,19 +35,19 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 @app.get("/health")
 def health():
-        return {"status": "ok", "service": "Mixlo AI"}
+    return {"status": "ok", "service": "Mixlo AI"}
 
 
 @app.post("/analyze")
 async def analyze_stems(files: list[UploadFile] = File(...)):
-        """
-            Step 1: Upload stems and get back classification results.
-                Does NOT mix yet -- lets the user confirm labels before mixing.
-                    """
-        if not files:
-                    raise HTTPException(400, "No files uploaded.")
-                if len(files) > 100:
-                            raise HTTPException(400, "Maximum 100 stems per mix.")
+    """
+    Step 1: Upload stems and get back classification results.
+    Does NOT mix yet ‚Äî lets the user confirm labels before mixing.
+    """
+    if not files:
+        raise HTTPException(400, "No files uploaded.")
+    if len(files) > 100:
+        raise HTTPException(400, "Maximum 100 stems per mix.")
 
     results = []
     session_id = str(uuid.uuid4())
@@ -55,17 +55,17 @@ async def analyze_stems(files: list[UploadFile] = File(...)):
     session_dir.mkdir()
 
     for upload in files:
-                if not upload.filename:
-                                continue
-                            ext = Path(upload.filename).suffix.lower()
+        if not upload.filename:
+            continue
+        ext = Path(upload.filename).suffix.lower()
         if ext not in {".wav", ".mp3", ".aiff", ".flac"}:
-                        raise HTTPException(400, f"{upload.filename}: unsupported format (use WAV/MP3/AIFF/FLAC).")
+            raise HTTPException(400, f"{upload.filename}: unsupported format (use WAV/MP3/AIFF/FLAC).")
 
         raw = await upload.read()
         dest = session_dir / upload.filename
         dest.write_bytes(raw)
 
-        # Load at 22050 Hz, first 30 s only -- keeps RAM well under 512 MB
+        # Load at 22050 Hz, first 30 s only ‚Äî keeps RAM well under 512 MB
         audio, sr = librosa.load(str(dest), sr=22050, mono=True, duration=30.0)
         duration_sec = round(librosa.get_duration(filename=str(dest)), 2)
         label, confidence = classify_stem(audio, sr, upload.filename)
@@ -73,11 +73,11 @@ async def analyze_stems(files: list[UploadFile] = File(...)):
         gc.collect()
 
         results.append({
-                        "filename": upload.filename,
-                        "label":    label,
-                        "confidence": round(confidence, 2),
-                        "duration_sec": duration_sec,
-                        "sample_rate":  sr,
+            "filename": upload.filename,
+            "label":    label,
+            "confidence": round(confidence, 2),
+            "duration_sec": duration_sec,
+            "sample_rate":  sr,
         })
 
     return {"session_id": session_id, "stems": results}
@@ -85,34 +85,34 @@ async def analyze_stems(files: list[UploadFile] = File(...)):
 
 @app.post("/mix/{session_id}")
 async def mix_session(session_id: str):
-        """
-            Step 2: Mix the stems from a previously analyzed session.
-                Returns a download URL for the final WAV.
-                    """
+    """
+    Step 2: Mix the stems from a previously analyzed session.
+    Returns a download URL for the final WAV.
+    """
     session_dir = UPLOAD_DIR / session_id
     if not session_dir.exists():
-                raise HTTPException(404, "Session not found. Upload stems first via /analyze.")
+        raise HTTPException(404, "Session not found. Upload stems first via /analyze.")
 
     stem_files = list(session_dir.iterdir())
     if not stem_files:
-                raise HTTPException(400, "No stems found in this session.")
+        raise HTTPException(400, "No stems found in this session.")
 
     SR = 44100
 
     # Scan durations without loading audio to size the bus
     max_len = max(
-                int(librosa.get_duration(filename=str(p)) * SR) + SR
-                for p in stem_files
+        int(librosa.get_duration(filename=str(p)) * SR) + SR
+        for p in stem_files
     )
 
     bus = np.zeros((2, max_len), dtype=np.float32)
 
-    # Process one stem at a time -- never hold more than one + bus in RAM
+    # Process one stem at a time ‚Äî never hold more than one + bus in RAM
     for path in stem_files:
-                audio, sr = librosa.load(str(path), sr=SR, mono=False)
+        audio, sr = librosa.load(str(path), sr=SR, mono=False)
         if audio.ndim == 1:
-                        audio = np.stack([audio, audio])
-                    label, _ = classify_stem(audio[0], sr, path.name)
+            audio = np.stack([audio, audio])
+        label, _ = classify_stem(audio[0], sr, path.name)
 
         chain = CHAINS.get(label, CHAINS["lead"])()
         fader = 10 ** (FADER_DB.get(label, -3) / 20)
@@ -131,7 +131,7 @@ async def mix_session(session_id: str):
 
     peak = np.max(np.abs(bus))
     if peak > 0:
-                bus *= 10 ** (-1 / 20) / peak
+        bus *= 10 ** (-1 / 20) / peak
 
     out_filename = f"mixlo_mix_{session_id[:8]}.wav"
     out_path = OUTPUT_DIR / out_filename
@@ -144,7 +144,7 @@ async def mix_session(session_id: str):
 
 @app.get("/download/{filename}")
 def download_mix(filename: str):
-        path = OUTPUT_DIR / filename
+    path = OUTPUT_DIR / filename
     if not path.exists():
-                raise HTTPException(404, "File not found.")
+        raise HTTPException(404, "File not found.")
     return FileResponse(str(path), media_type="audio/wav", filename=filename)
